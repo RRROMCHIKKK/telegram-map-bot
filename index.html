@@ -71,17 +71,24 @@
             font-size: 16px;
             padding: 20px;
         }
+        .saved-marker {
+            background: #ff4444;
+            border: 3px solid #fff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div>
             <h2>🗺️ Ваше местоположение</h2>
-            <div class="hint">Карта открывается там где вы сейчас</div>
+            <div class="hint" id="locationHint">Определяем ваше местоположение...</div>
         </div>
         
         <div id="map">
-            <div class="loading">📍 Определяем ваше местоположение...</div>
+            <div class="loading">📍 Загружаем карту...</div>
         </div>
         
         <div id="coords">📍 Выберите точное место на карте</div>
@@ -93,10 +100,16 @@
     <script>
         let map = null;
         let marker = null;
+        let savedMarker = null;
         const saveBtn = document.getElementById('saveBtn');
         const coordsText = document.getElementById('coords');
         const mapContainer = document.getElementById('map');
-        
+        const locationHint = document.getElementById('locationHint');
+
+        // Получаем параметры из URL (координаты из бота)
+        const urlParams = new URLSearchParams(window.location.search);
+        const savedCoords = urlParams.get('coords');
+
         // Функция для получения местоположения
         function getLocation() {
             if (navigator.geolocation) {
@@ -107,9 +120,14 @@
                     },
                     // Ошибка - не смогли найти
                     function(error) {
-                        // Используем координаты по умолчанию (Москва)
-                        console.log('Геолокация не сработала:', error);
-                        initMap(55.7558, 37.6173);
+                        // Если есть сохраненные координаты - используем их
+                        if (savedCoords) {
+                            const [lat, lng] = savedCoords.split(',').map(Number);
+                            initMap(lat, lng);
+                        } else {
+                            // Используем координаты по умолчанию (Москва)
+                            initMap(55.7558, 37.6173);
+                        }
                     },
                     // Настройки геолокации
                     {
@@ -120,7 +138,12 @@
                 );
             } else {
                 // Браузер не поддерживает геолокацию
-                initMap(55.7558, 37.6173);
+                if (savedCoords) {
+                    const [lat, lng] = savedCoords.split(',').map(Number);
+                    initMap(lat, lng);
+                } else {
+                    initMap(55.7558, 37.6173);
+                }
             }
         }
         
@@ -129,14 +152,34 @@
             // Убираем сообщение о загрузке
             mapContainer.innerHTML = '';
             
-            // Создаем карту в центре местоположения пользователя
+            // Создаем карту
             map = L.map('map').setView([lat, lng], 15);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap'
             }).addTo(map);
             
-            // Добавляем маркер текущего местоположения
+            // Если есть сохраненные координаты - показываем их
+            if (savedCoords) {
+                const [savedLat, savedLng] = savedCoords.split(',').map(Number);
+                
+                // Добавляем маркер сохраненного места (красный)
+                savedMarker = L.marker([savedLat, savedLng], {
+                    icon: L.divIcon({
+                        className: 'saved-marker',
+                        iconSize: [20, 20]
+                    })
+                })
+                .addTo(map)
+                .bindPopup("📍 Ваше сохраненное место")
+                .openPopup();
+                
+                locationHint.textContent = "Синий маркер - ваше текущее местоположение. Красный - сохраненное место.";
+            } else {
+                locationHint.textContent = "Синий маркер - ваше текущее местоположение";
+            }
+            
+            // Добавляем маркер текущего местоположения (синий)
             marker = L.marker([lat, lng])
                 .addTo(map)
                 .bindPopup("📍 Вы здесь!")
@@ -197,3 +240,4 @@
     </script>
 </body>
 </html>
+
