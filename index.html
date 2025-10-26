@@ -1,52 +1,199 @@
-html
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Карта для бота</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <style>
-        body { margin: 20px; font-family: Arial; }
-        #map { height: 400px; margin: 10px 0; border: 2px solid blue; }
-        button { padding: 10px 20px; font-size: 16px; background: green; color: white; border: none; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 15px;
+            background: #f5f5f5;
+            height: 100vh;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            gap: 15px;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        #map {
+            flex: 1;
+            border: 2px solid #007bff;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        button {
+            padding: 16px 24px;
+            font-size: 18px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        #coords {
+            text-align: center;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+        .hint {
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .loading {
+            text-align: center;
+            color: #007bff;
+            font-size: 16px;
+            padding: 20px;
+        }
     </style>
 </head>
 <body>
-    <h2>🗺️ Нажми на карту где потерялась вещь</h2>
-    <div id="map"></div>
-    <button onclick="sendCoords()">✅ Сохранить это место</button>
-    <p id="coords">Место еще не выбрано</p>
+    <div class="container">
+        <div>
+            <h2>🗺️ Ваше местоположение</h2>
+            <div class="hint">Карта открывается там где вы сейчас</div>
+        </div>
+        
+        <div id="map">
+            <div class="loading">📍 Определяем ваше местоположение...</div>
+        </div>
+        
+        <div id="coords">📍 Выберите точное место на карте</div>
+        
+        <button id="saveBtn" onclick="sendCoords()" disabled>✅ Сохранить это место</button>
+    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Создаем карту
-        const map = L.map('map').setView([55.7558, 37.6173], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        let map = null;
+        let marker = null;
+        const saveBtn = document.getElementById('saveBtn');
+        const coordsText = document.getElementById('coords');
+        const mapContainer = document.getElementById('map');
         
-        let marker;
-        
-        // Когда нажимаем на карту
-        map.on('click', function(e) {
-            if (marker) {
-                map.removeLayer(marker);
+        // Функция для получения местоположения
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    // Успех - нашли местоположение
+                    function(position) {
+                        initMap(position.coords.latitude, position.coords.longitude);
+                    },
+                    // Ошибка - не смогли найти
+                    function(error) {
+                        // Используем координаты по умолчанию (Москва)
+                        console.log('Геолокация не сработала:', error);
+                        initMap(55.7558, 37.6173);
+                    },
+                    // Настройки геолокации
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 60000
+                    }
+                );
+            } else {
+                // Браузер не поддерживает геолокацию
+                initMap(55.7558, 37.6173);
             }
-            marker = L.marker(e.latlng).addTo(map);
-            document.getElementById('coords').textContent = 
-                `Выбрано: Широта ${e.latlng.lat.toFixed(4)}, Долгота ${e.latlng.lng.toFixed(4)}`;
-        });
+        }
+        
+        // Функция инициализации карты
+        function initMap(lat, lng) {
+            // Убираем сообщение о загрузке
+            mapContainer.innerHTML = '';
+            
+            // Создаем карту в центре местоположения пользователя
+            map = L.map('map').setView([lat, lng], 15);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+            
+            // Добавляем маркер текущего местоположения
+            marker = L.marker([lat, lng])
+                .addTo(map)
+                .bindPopup("📍 Вы здесь!")
+                .openPopup();
+            
+            // Обновляем текст координат
+            updateCoordsText(lat, lng);
+            
+            // Активируем кнопку (место уже выбрано)
+            saveBtn.disabled = false;
+            saveBtn.style.background = '#28a745';
+            
+            // Обработчик кликов на карте
+            map.on('click', function(e) {
+                // Удаляем старый маркер
+                if (marker) {
+                    map.removeLayer(marker);
+                }
+                
+                // Добавляем новый маркер в выбранное место
+                marker = L.marker(e.latlng)
+                    .addTo(map)
+                    .bindPopup("📍 Выбрано здесь!")
+                    .openPopup();
+                
+                // Обновляем текст координат
+                updateCoordsText(e.latlng.lat, e.latlng.lng);
+            });
+        }
+        
+        // Функция обновления текста координат
+        function updateCoordsText(lat, lng) {
+            const latFormatted = lat.toFixed(6);
+            const lngFormatted = lng.toFixed(6);
+            coordsText.textContent = `📍 Широта: ${latFormatted}, Долгота: ${lngFormatted}`;
+            coordsText.style.color = '#28a745';
+            coordsText.style.fontWeight = 'bold';
+        }
         
         function sendCoords() {
             if (marker) {
                 const coords = marker.getLatLng();
-                const coordsText = `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`;
-                Telegram.WebApp.sendData(coordsText);
+                const coordsString = `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`;
+                
+                // Отправляем данные в бота
+                Telegram.WebApp.sendData(coordsString);
+                // Закрываем веб-приложение
                 Telegram.WebApp.close();
-            } else {
-                alert('Сначала нажми на карту!');
             }
         }
         
+        // Инициализация Telegram Web App и получение местоположения
         Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+        
+        // Запускаем получение местоположения после загрузки
+        setTimeout(getLocation, 500);
     </script>
 </body>
 </html>
